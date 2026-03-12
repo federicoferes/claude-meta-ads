@@ -42,7 +42,7 @@ export default function HomePage() {
         {accounts.map((account) => (
           <li key={account.id}>
             <button
-              onClick={() => router.push(`/accounts/${account.id}/creatives`)}
+              onClick={() => router.push(`/accounts/${account.id}/creatives?name=${encodeURIComponent(account.name)}`)}
               className="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-blue-600 rounded-xl px-5 py-4 transition-colors"
             >
               <div className="font-medium">{account.name}</div>

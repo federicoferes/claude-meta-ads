@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { CreativeInsight } from "@/lib/meta";
 import { detectFatigue } from "@/lib/fatigue";
@@ -18,8 +18,12 @@ const DATE_PRESETS = [
 
 export default function CreativesPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const accountName = searchParams.get("name") ?? id;
+
   const [insights, setInsights] = useState<CreativeInsight[]>([]);
   const [previous, setPrevious] = useState<CreativeInsight[]>([]);
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [datePreset, setDatePreset] = useState("last_30d");
@@ -34,6 +38,7 @@ export default function CreativesPage() {
         else {
           setInsights(data.current ?? []);
           setPrevious(data.previous ?? []);
+          setThumbnails(data.thumbnails ?? {});
         }
       })
       .catch((e) => setError(String(e)))
@@ -41,7 +46,6 @@ export default function CreativesPage() {
   }, [id, datePreset]);
 
   const alerts = detectFatigue(insights, previous);
-
   const totalSpend = insights.reduce((s, a) => s + parseFloat(a.spend), 0);
   const totalImpressions = insights.reduce((s, a) => s + parseFloat(a.impressions), 0);
 
@@ -50,13 +54,13 @@ export default function CreativesPage() {
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
         <Link href="/" className="hover:text-white transition-colors">Cuentas</Link>
         <span>/</span>
-        <span className="text-gray-300">Creativos</span>
+        <span className="text-gray-300">{accountName}</span>
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold">Reporte de Creativos</h1>
-          <p className="text-gray-400 text-sm mt-1">{id}</p>
+          <h1 className="text-2xl font-bold">{accountName}</h1>
+          <p className="text-gray-500 text-sm mt-1">Reporte de Creativos</p>
         </div>
         <select
           value={datePreset}
@@ -69,7 +73,6 @@ export default function CreativesPage() {
         </select>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <SummaryCard label="Anuncios" value={String(insights.length)} />
         <SummaryCard label="Gasto total" value={`$${totalSpend.toLocaleString("es-AR", { maximumFractionDigits: 0 })}`} />
@@ -88,7 +91,15 @@ export default function CreativesPage() {
       ) : (
         <>
           <FatigueAlerts alerts={alerts} />
-          <CreativesTable insights={insights} />
+          <p className="text-xs text-gray-600 mb-3">Hacé clic en una fila para ver la evolución diaria.</p>
+          <CreativesTable
+            insights={insights}
+            previous={previous}
+            alerts={alerts}
+            thumbnails={thumbnails}
+            accountId={id}
+            datePreset={datePreset}
+          />
         </>
       )}
     </main>

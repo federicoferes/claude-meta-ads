@@ -99,6 +99,38 @@ export async function getPreviousCreativeInsights(
   return data.data ?? [];
 }
 
+export interface DailyInsight {
+  ad_id: string;
+  date_start: string;
+  spend: string;
+  impressions: string;
+  clicks: string;
+  ctr: string;
+  actions?: { action_type: string; value: string }[];
+  action_values?: { action_type: string; value: string }[];
+}
+
+export async function getAdThumbnails(accountId: string): Promise<Record<string, string>> {
+  const url = `${BASE_URL}/${accountId}/ads?fields=id,creative{thumbnail_url}&limit=500&access_token=${TOKEN}`;
+  const res = await fetch(url, { next: { revalidate: 3600 } });
+  if (!res.ok) return {};
+  const data = await res.json();
+  const map: Record<string, string> = {};
+  for (const ad of (data.data ?? [])) {
+    if (ad.creative?.thumbnail_url) map[ad.id] = ad.creative.thumbnail_url;
+  }
+  return map;
+}
+
+export async function getDailyInsights(accountId: string, datePreset: string): Promise<DailyInsight[]> {
+  const fields = "ad_id,date_start,spend,impressions,clicks,ctr,actions,action_values";
+  const url = `${BASE_URL}/${accountId}/insights?level=ad&fields=${fields}&date_preset=${datePreset}&time_increment=1&limit=1000&access_token=${TOKEN}`;
+  const res = await fetch(url, { next: { revalidate: 300 } });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.data ?? [];
+}
+
 export function getActionValue(
   actions: { action_type: string; value: string }[] | undefined,
   type: string
