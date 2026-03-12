@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AdAccount } from "@/lib/meta";
+import TokenStatus from "@/components/TokenStatus";
 
 export default function HomePage() {
   const [accounts, setAccounts] = useState<AdAccount[]>([]);
@@ -25,6 +26,8 @@ export default function HomePage() {
     <main className="max-w-2xl mx-auto px-4 py-16">
       <h1 className="text-3xl font-bold mb-2">Meta Ads Reporting</h1>
       <p className="text-gray-400 mb-10">Seleccioná una cuenta para ver el reporte de creativos.</p>
+
+      <TokenStatus />
 
       {loading && <p className="text-gray-500">Cargando cuentas...</p>}
 

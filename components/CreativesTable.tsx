@@ -44,10 +44,14 @@ function Delta({ current, previous, inverse = false }: { current: number; previo
   );
 }
 
+type AlertFilter = "all" | "any" | "critical" | "warning" | "none";
+
 export default function CreativesTable({ insights, previous, alerts, thumbnails, accountId, datePreset }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("alerts");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [selectedAdId, setSelectedAdId] = useState<string | null>(null);
+  const [filterName, setFilterName] = useState("");
+  const [filterAlert, setFilterAlert] = useState<AlertFilter>("all");
 
   // Lazy import TrendChart to avoid SSR issues
   const [TrendChart, setTrendChart] = useState<React.ComponentType<any> | null>(null);
@@ -65,7 +69,19 @@ export default function CreativesTable({ insights, previous, alerts, thumbnails,
     else { setSortKey(key); setSortDir("desc"); }
   }
 
-  const sorted = [...insights].sort((a, b) => {
+  const filtered = insights.filter((ad) => {
+    if (filterName && !ad.ad_name.toLowerCase().includes(filterName.toLowerCase())) return false;
+    if (filterAlert !== "all") {
+      const score = alertScore(ad.ad_id, alerts);
+      if (filterAlert === "any" && score === 0) return false;
+      if (filterAlert === "critical" && score !== 2) return false;
+      if (filterAlert === "warning" && score !== 1) return false;
+      if (filterAlert === "none" && score !== 0) return false;
+    }
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
     if (sortKey === "alerts") {
       const diff = alertScore(b.ad_id, alerts) - alertScore(a.ad_id, alerts);
       if (diff !== 0) return diff;
@@ -90,6 +106,35 @@ export default function CreativesTable({ insights, previous, alerts, thumbnails,
   ];
 
   return (
+    <div>
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <input
+          type="text"
+          placeholder="Buscar por nombre de anuncio..."
+          value={filterName}
+          onChange={(e) => setFilterName(e.target.value)}
+          className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600"
+        />
+        <select
+          value={filterAlert}
+          onChange={(e) => setFilterAlert(e.target.value as AlertFilter)}
+          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+        >
+          <option value="all">Todas las alertas</option>
+          <option value="any">Con alguna alerta</option>
+          <option value="critical">Solo críticas</option>
+          <option value="warning">Solo advertencias</option>
+          <option value="none">Sin alertas</option>
+        </select>
+        {(filterName || filterAlert !== "all") && (
+          <button
+            onClick={() => { setFilterName(""); setFilterAlert("all"); }}
+            className="text-xs text-gray-500 hover:text-white px-3 py-2 border border-gray-700 rounded-lg transition-colors whitespace-nowrap"
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
     <div className="overflow-x-auto rounded-xl border border-gray-800">
       <table className="w-full text-sm">
         <thead>
@@ -204,8 +249,13 @@ export default function CreativesTable({ insights, previous, alerts, thumbnails,
       </table>
 
       {sorted.length === 0 && (
-        <p className="text-center text-gray-500 py-10">No hay datos para este período.</p>
+        <p className="text-center text-gray-500 py-10">
+          {filtered.length === 0 && insights.length > 0
+            ? "Ningún anuncio coincide con los filtros."
+            : "No hay datos para este período."}
+        </p>
       )}
+    </div>
     </div>
   );
 }
