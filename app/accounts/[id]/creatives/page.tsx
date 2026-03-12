@@ -19,6 +19,7 @@ const DATE_PRESETS = [
 export default function CreativesPage() {
   const { id } = useParams<{ id: string }>();
   const [insights, setInsights] = useState<CreativeInsight[]>([]);
+  const [previous, setPrevious] = useState<CreativeInsight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [datePreset, setDatePreset] = useState("last_30d");
@@ -30,13 +31,16 @@ export default function CreativesPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.error) setError(data.error);
-        else setInsights(data);
+        else {
+          setInsights(data.current ?? []);
+          setPrevious(data.previous ?? []);
+        }
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   }, [id, datePreset]);
 
-  const alerts = detectFatigue(insights);
+  const alerts = detectFatigue(insights, previous);
 
   const totalSpend = insights.reduce((s, a) => s + parseFloat(a.spend), 0);
   const totalImpressions = insights.reduce((s, a) => s + parseFloat(a.impressions), 0);

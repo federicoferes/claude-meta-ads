@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCreativeInsights } from "@/lib/meta";
+import { getCreativeInsights, getPreviousCreativeInsights } from "@/lib/meta";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -11,8 +11,11 @@ export async function GET(req: Request) {
   }
 
   try {
-    const insights = await getCreativeInsights(accountId, datePreset);
-    return NextResponse.json(insights);
+    const [current, previous] = await Promise.all([
+      getCreativeInsights(accountId, datePreset),
+      getPreviousCreativeInsights(accountId, datePreset),
+    ]);
+    return NextResponse.json({ current, previous });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

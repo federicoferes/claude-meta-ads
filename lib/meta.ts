@@ -34,42 +34,67 @@ export interface CreativeInsight {
 
 export async function getAdAccounts(): Promise<AdAccount[]> {
   const res = await fetch(
-    `${BASE_URL}/me/adaccounts?fields=id,name,currency,account_status&access_token=${TOKEN}`
+    `${BASE_URL}/me/adaccounts?fields=id,name,currency,account_status&limit=200&access_token=${TOKEN}`
   );
   if (!res.ok) throw new Error(`Meta API error: ${res.status}`);
   const data = await res.json();
-  return data.data ?? [];
+  const all: AdAccount[] = data.data ?? [];
+
+  const allowedIds = process.env.META_AD_ACCOUNT_IDS?.split(",").map((id) => id.trim()) ?? [];
+  if (allowedIds.length === 0) return all.filter((a) => a.account_status === 1);
+  return all.filter((a) => allowedIds.includes(a.id) && a.account_status === 1);
 }
+
+const PRESET_DAYS: Record<string, number> = {
+  yesterday: 1,
+  last_7d: 7,
+  last_14d: 14,
+  last_30d: 30,
+  last_90d: 90,
+};
+
+function toYMD(date: Date): string {
+  return date.toISOString().split("T")[0];
+}
+
+export function getPreviousPeriodRange(datePreset: string): { since: string; until: string } {
+  const days = PRESET_DAYS[datePreset] ?? 30;
+  const until = new Date();
+  until.setDate(until.getDate() - days);
+  const since = new Date(until);
+  since.setDate(since.getDate() - days);
+  return { since: toYMD(since), until: toYMD(until) };
+}
+
+const FIELDS = [
+  "ad_id", "ad_name", "adset_name", "campaign_name",
+  "spend", "impressions", "reach", "frequency",
+  "clicks", "ctr", "cpc", "cpm",
+  "actions", "action_values",
+  "video_avg_time_watched_actions",
+  "video_p25_watched_actions", "video_p50_watched_actions",
+  "video_p75_watched_actions", "video_p100_watched_actions",
+].join(",");
 
 export async function getCreativeInsights(
   accountId: string,
   datePreset: string = "last_30d"
 ): Promise<CreativeInsight[]> {
-  const fields = [
-    "ad_id",
-    "ad_name",
-    "adset_name",
-    "campaign_name",
-    "spend",
-    "impressions",
-    "reach",
-    "frequency",
-    "clicks",
-    "ctr",
-    "cpc",
-    "cpm",
-    "actions",
-    "action_values",
-    "video_avg_time_watched_actions",
-    "video_p25_watched_actions",
-    "video_p50_watched_actions",
-    "video_p75_watched_actions",
-    "video_p100_watched_actions",
-  ].join(",");
-
-  const url = `${BASE_URL}/${accountId}/insights?level=ad&fields=${fields}&date_preset=${datePreset}&limit=500&access_token=${TOKEN}`;
+  const url = `${BASE_URL}/${accountId}/insights?level=ad&fields=${FIELDS}&date_preset=${datePreset}&limit=500&access_token=${TOKEN}`;
   const res = await fetch(url, { next: { revalidate: 300 } });
   if (!res.ok) throw new Error(`Meta API error: ${res.status}`);
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+export async function getPreviousCreativeInsights(
+  accountId: string,
+  datePreset: string = "last_30d"
+): Promise<CreativeInsight[]> {
+  const { since, until } = getPreviousPeriodRange(datePreset);
+  const url = `${BASE_URL}/${accountId}/insights?level=ad&fields=${FIELDS}&time_range={"since":"${since}","until":"${until}"}&limit=500&access_token=${TOKEN}`;
+  const res = await fetch(url, { next: { revalidate: 300 } });
+  if (!res.ok) return [];
   const data = await res.json();
   return data.data ?? [];
 }
