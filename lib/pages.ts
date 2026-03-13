@@ -55,16 +55,6 @@ export async function getPages(): Promise<Page[]> {
   return data.data ?? [];
 }
 
-async function getPageToken(pageId: string): Promise<string> {
-  const res = await fetch(
-    `${BASE_URL}/me/accounts?fields=id,access_token&limit=100&access_token=${TOKEN}`,
-    { next: { revalidate: 3600 } }
-  );
-  if (!res.ok) return TOKEN!;
-  const data = await res.json();
-  const page = (data.data ?? []).find((p: { id: string; access_token: string }) => p.id === pageId);
-  return page?.access_token ?? TOKEN!;
-}
 
 const INSIGHT_METRICS = "post_impressions,post_impressions_paid,post_impressions_unique,post_engaged_users,post_reactions_by_type_total,post_clicks";
 
@@ -106,7 +96,7 @@ async function batchPostInsights(postIds: string[], pageToken: string) {
   const res = await fetch("https://graph.facebook.com/v19.0", {
     method: "POST",
     body,
-    next: { revalidate: 300 },
+    next: { revalidate: 900 },
   });
 
   if (!res.ok) return postIds.map(() => null);
@@ -144,11 +134,10 @@ type RawPost = {
 };
 
 export async function getPagePosts(pageId: string, datePreset: string): Promise<PagePost[]> {
-  const pageToken = await getPageToken(pageId);
   const { since, until } = getDateRange(datePreset);
 
-  const url = `${BASE_URL}/${pageId}/posts?fields=id,message,story,created_time,full_picture,permalink_url,shares,comments.summary(true)&since=${since}&until=${until}&limit=25&access_token=${pageToken}`;
-  const res = await fetch(url, { next: { revalidate: 300 } });
+  const url = `${BASE_URL}/${pageId}/posts?fields=id,message,story,created_time,full_picture,permalink_url,shares,comments.summary(true)&since=${since}&until=${until}&limit=10&access_token=${TOKEN}`;
+  const res = await fetch(url, { next: { revalidate: 900 } });
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
     throw new Error(err?.error?.message ?? `Meta API error: ${res.status}`);
@@ -158,7 +147,7 @@ export async function getPagePosts(pageId: string, datePreset: string): Promise<
 
   if (posts.length === 0) return [];
 
-  const insightsList = await batchPostInsights(posts.map((p) => p.id), pageToken);
+  const insightsList = await batchPostInsights(posts.map((p) => p.id), TOKEN!);
 
   return posts.map((post, i): PagePost => ({
     id: post.id,
