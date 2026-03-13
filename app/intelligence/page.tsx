@@ -185,7 +185,7 @@ function BestAdCard({ ad }: { ad: BestAd | null }) {
             {ad.thumbnail ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={ad.thumbnail}
+                src={`/api/image?url=${encodeURIComponent(ad.thumbnail!)}`}
                 alt=""
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
@@ -259,7 +259,7 @@ function BestPostCard({ post }: { post: BestPost | null }) {
             {post.full_picture ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={post.full_picture}
+                src={`/api/image?url=${encodeURIComponent(post.full_picture!)}`}
                 alt=""
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"

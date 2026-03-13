@@ -119,7 +119,7 @@ export default function PostsTable({ posts }: Props) {
                     {post.full_picture ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={post.full_picture}
+                        src={`/api/image?url=${encodeURIComponent(post.full_picture!)}`}
                         alt=""
                         referrerPolicy="no-referrer"
                         className="w-12 h-12 object-cover rounded-md bg-gray-800"

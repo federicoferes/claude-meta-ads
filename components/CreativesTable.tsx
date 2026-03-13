@@ -188,7 +188,7 @@ export default function CreativesTable({ insights, previous, alerts, thumbnails,
                     {thumbnails[ad.ad_id] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={thumbnails[ad.ad_id]}
+                        src={`/api/image?url=${encodeURIComponent(thumbnails[ad.ad_id])}`}
                         alt=""
                         referrerPolicy="no-referrer"
                         className="w-10 h-10 object-cover rounded-md bg-gray-800"

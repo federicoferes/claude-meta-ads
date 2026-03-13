@@ -62,7 +62,7 @@ export default function PagesPage() {
               {page.picture?.data?.url && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={page.picture.data.url}
+                  src={`/api/image?url=${encodeURIComponent(page.picture.data.url)}`}
                   alt=""
                   referrerPolicy="no-referrer"
                   className="w-10 h-10 rounded-full object-cover bg-gray-800 flex-shrink-0"

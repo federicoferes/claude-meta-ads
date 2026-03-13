@@ -66,33 +66,18 @@ async function getPageToken(pageId: string): Promise<string> {
   return page?.access_token ?? TOKEN!;
 }
 
+const INSIGHT_METRICS = "post_impressions,post_impressions_paid,post_impressions_unique,post_engaged_users,post_reactions_by_type_total,post_clicks";
+
 type InsightItem = { name: string; values: { value: number | Record<string, number> }[] };
 
-async function getPostInsights(postId: string, pageToken: string) {
-  const metrics = [
-    "post_impressions",
-    "post_impressions_paid",
-    "post_impressions_unique",
-    "post_engaged_users",
-    "post_reactions_by_type_total",
-    "post_clicks",
-  ].join(",");
-
-  const res = await fetch(
-    `${BASE_URL}/${postId}/insights?metric=${metrics}&period=lifetime&access_token=${pageToken}`,
-    { next: { revalidate: 300 } }
-  );
-  if (!res.ok) return null;
-  const data = await res.json();
-
+function parseInsightData(data: { data?: InsightItem[] }) {
   const getVal = (name: string): number => {
-    const item = (data.data ?? []).find((d: InsightItem) => d.name === name);
+    const item = (data.data ?? []).find((d) => d.name === name);
     const val = item?.values?.[0]?.value;
     if (val == null) return 0;
     if (typeof val === "object") return Object.values(val as Record<string, number>).reduce((a, b) => a + b, 0);
     return val as number;
   };
-
   const reach = getVal("post_impressions_unique");
   const engaged = getVal("post_engaged_users");
   return {
@@ -104,6 +89,37 @@ async function getPostInsights(postId: string, pageToken: string) {
     clicks: getVal("post_clicks"),
     engagement_rate: reach > 0 ? (engaged / reach) * 100 : 0,
   };
+}
+
+// Use Meta Batch API to fetch all post insights in a single HTTP request
+async function batchPostInsights(postIds: string[], pageToken: string) {
+  const batch = postIds.map((id) => ({
+    method: "GET",
+    relative_url: `${id}/insights?metric=${INSIGHT_METRICS}&period=lifetime`,
+  }));
+
+  const body = new URLSearchParams({
+    access_token: pageToken,
+    batch: JSON.stringify(batch),
+  });
+
+  const res = await fetch("https://graph.facebook.com/v19.0", {
+    method: "POST",
+    body,
+    next: { revalidate: 300 },
+  });
+
+  if (!res.ok) return postIds.map(() => null);
+  const results = await res.json() as ({ code: number; body: string } | null)[];
+
+  return results.map((result) => {
+    if (!result || result.code !== 200) return null;
+    try {
+      return parseInsightData(JSON.parse(result.body));
+    } catch {
+      return null;
+    }
+  });
 }
 
 const ZERO_INSIGHTS = {
@@ -133,13 +149,16 @@ export async function getPagePosts(pageId: string, datePreset: string): Promise<
 
   const url = `${BASE_URL}/${pageId}/posts?fields=id,message,story,created_time,full_picture,permalink_url,shares,comments.summary(true)&since=${since}&until=${until}&limit=25&access_token=${pageToken}`;
   const res = await fetch(url, { next: { revalidate: 300 } });
-  if (!res.ok) throw new Error(`Meta API error: ${res.status}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message ?? `Meta API error: ${res.status}`);
+  }
   const data = await res.json();
   const posts: RawPost[] = data.data ?? [];
 
   if (posts.length === 0) return [];
 
-  const insightsList = await Promise.all(posts.map((p) => getPostInsights(p.id, pageToken)));
+  const insightsList = await batchPostInsights(posts.map((p) => p.id), pageToken);
 
   return posts.map((post, i): PagePost => ({
     id: post.id,
