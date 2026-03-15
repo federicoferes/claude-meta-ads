@@ -1,22 +1,27 @@
 import { NextResponse } from "next/server";
 import { getCreativeInsights, getAdThumbnails, calcROAS, calcCPA } from "@/lib/meta";
-import { getPagePosts } from "@/lib/pages";
+import { getPagePosts, getIgPosts } from "@/lib/pages";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const accountId = searchParams.get("accountId");
-  const pageId = searchParams.get("pageId");
+  const pageId = searchParams.get("pageId");   // Facebook page (optional if igId provided)
+  const igId = searchParams.get("igId");        // Instagram account (optional if pageId provided)
   const datePreset = searchParams.get("datePreset") ?? "last_30d";
 
-  if (!accountId || !pageId) {
-    return NextResponse.json({ error: "accountId y pageId son requeridos" }, { status: 400 });
+  if (!accountId || (!pageId && !igId)) {
+    return NextResponse.json({ error: "accountId y pageId o igId son requeridos" }, { status: 400 });
   }
 
   try {
+    const postsPromise = igId
+      ? getIgPosts(igId, datePreset)
+      : getPagePosts(pageId!, datePreset);
+
     const [insights, thumbnails, posts] = await Promise.all([
       getCreativeInsights(accountId, datePreset),
       getAdThumbnails(accountId),
-      getPagePosts(pageId, datePreset),
+      postsPromise,
     ]);
 
     // Best ad: ROAS > 0 first, tiebreak by CTR

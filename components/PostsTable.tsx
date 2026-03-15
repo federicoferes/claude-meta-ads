@@ -6,9 +6,10 @@ import { clsx } from "clsx";
 
 interface Props {
   posts: PagePost[];
+  source?: "facebook" | "instagram";
 }
 
-type SortKey = "reach" | "impressions" | "engagement_rate" | "reactions" | "comments" | "shares" | "clicks";
+type SortKey = "reach" | "impressions" | "engagement_rate" | "reactions" | "comments" | "shares" | "clicks" | "saves";
 type BoostFilter = "all" | "boosted" | "organic";
 
 function fmt(n: number, decimals = 0) {
@@ -24,7 +25,8 @@ function timeAgo(dateStr: string): string {
   return date.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
 }
 
-export default function PostsTable({ posts }: Props) {
+export default function PostsTable({ posts, source = "facebook" }: Props) {
+  const isIg = source === "instagram";
   const [sortKey, setSortKey] = useState<SortKey>("reach");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filterText, setFilterText] = useState("");
@@ -44,8 +46,8 @@ export default function PostsTable({ posts }: Props) {
   });
 
   const sorted = [...filtered].sort((a, b) => {
-    const va = a[sortKey];
-    const vb = b[sortKey];
+    const va = sortKey === "saves" ? (a.saves ?? 0) : a[sortKey as keyof PagePost] as number;
+    const vb = sortKey === "saves" ? (b.saves ?? 0) : b[sortKey as keyof PagePost] as number;
     return sortDir === "desc" ? vb - va : va - vb;
   });
 
@@ -53,10 +55,12 @@ export default function PostsTable({ posts }: Props) {
     { key: "reach", label: "Alcance" },
     { key: "impressions", label: "Impresiones" },
     { key: "engagement_rate", label: "Eng. Rate" },
-    { key: "reactions", label: "Reacciones" },
+    { key: "reactions", label: isIg ? "Likes" : "Reacciones" },
     { key: "comments", label: "Comentarios" },
-    { key: "shares", label: "Shares" },
-    { key: "clicks", label: "Clicks" },
+    ...(isIg
+      ? [{ key: "saves" as SortKey, label: "Guardados" }]
+      : [{ key: "shares" as SortKey, label: "Shares" }, { key: "clicks" as SortKey, label: "Clicks" }]
+    ),
   ];
 
   const hasFilters = filterText || filterBoost !== "all";
@@ -71,15 +75,17 @@ export default function PostsTable({ posts }: Props) {
           onChange={(e) => setFilterText(e.target.value)}
           className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600"
         />
-        <select
-          value={filterBoost}
-          onChange={(e) => setFilterBoost(e.target.value as BoostFilter)}
-          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-        >
-          <option value="all">Todos los posts</option>
-          <option value="boosted">Solo boosteados</option>
-          <option value="organic">Solo orgánicos</option>
-        </select>
+        {!isIg && (
+          <select
+            value={filterBoost}
+            onChange={(e) => setFilterBoost(e.target.value as BoostFilter)}
+            className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+          >
+            <option value="all">Todos los posts</option>
+            <option value="boosted">Solo boosteados</option>
+            <option value="organic">Solo orgánicos</option>
+          </select>
+        )}
         {hasFilters && (
           <button
             onClick={() => { setFilterText(""); setFilterBoost("all"); }}
@@ -163,8 +169,13 @@ export default function PostsTable({ posts }: Props) {
                   </td>
                   <td className="px-4 py-3 text-right text-gray-300">{fmt(post.reactions)}</td>
                   <td className="px-4 py-3 text-right text-gray-300">{fmt(post.comments)}</td>
-                  <td className="px-4 py-3 text-right text-gray-300">{fmt(post.shares)}</td>
-                  <td className="px-4 py-3 text-right text-gray-300">{fmt(post.clicks)}</td>
+                  {isIg
+                    ? <td className="px-4 py-3 text-right text-gray-300">{fmt(post.saves ?? 0)}</td>
+                    : <>
+                        <td className="px-4 py-3 text-right text-gray-300">{fmt(post.shares)}</td>
+                        <td className="px-4 py-3 text-right text-gray-300">{fmt(post.clicks)}</td>
+                      </>
+                  }
                 </tr>
               );
             })}

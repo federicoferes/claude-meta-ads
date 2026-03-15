@@ -23,7 +23,17 @@ export interface PagePost {
   comments: number;
   shares: number;
   clicks: number;
+  saves?: number;
   engagement_rate: number;
+  source?: "facebook" | "instagram";
+}
+
+export interface IgAccount {
+  id: string;
+  name: string;
+  username: string;
+  profile_picture_url?: string;
+  followers_count: number;
 }
 
 const PRESET_DAYS: Record<string, number> = {
@@ -109,6 +119,107 @@ async function batchPostInsights(postIds: string[], pageToken: string) {
     } catch {
       return null;
     }
+  });
+}
+
+export async function getIgAccounts(): Promise<IgAccount[]> {
+  const res = await fetch(
+    `${BASE_URL}/me/accounts?fields=id,instagram_business_account{id,name,username,profile_picture_url,followers_count}&limit=100&access_token=${TOKEN}`,
+    { next: { revalidate: 3600 } }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.data ?? [])
+    .filter((p: { instagram_business_account?: IgAccount }) => p.instagram_business_account)
+    .map((p: { instagram_business_account: IgAccount }) => p.instagram_business_account);
+}
+
+async function batchIgInsights(mediaIds: string[]) {
+  const batch = mediaIds.map((id) => ({
+    method: "GET",
+    relative_url: `${id}/insights?metric=reach,impressions,engagement,saved`,
+  }));
+
+  const body = new URLSearchParams({
+    access_token: TOKEN!,
+    batch: JSON.stringify(batch),
+  });
+
+  const res = await fetch("https://graph.facebook.com/v19.0", {
+    method: "POST",
+    body,
+    next: { revalidate: 900 },
+  });
+
+  if (!res.ok) return mediaIds.map(() => null);
+  const results = await res.json() as ({ code: number; body: string } | null)[];
+
+  return results.map((result) => {
+    if (!result || result.code !== 200) return null;
+    try {
+      const data = JSON.parse(result.body);
+      const getVal = (name: string): number => {
+        const item = (data.data ?? []).find((d: InsightItem) => d.name === name);
+        const val = item?.values?.[0]?.value;
+        if (val == null) return 0;
+        if (typeof val === "object") return Object.values(val as Record<string, number>).reduce((a, b) => a + b, 0);
+        return val as number;
+      };
+      return { reach: getVal("reach"), impressions: getVal("impressions"), engagement: getVal("engagement"), saved: getVal("saved") };
+    } catch { return null; }
+  });
+}
+
+type RawIgMedia = {
+  id: string;
+  caption?: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  timestamp: string;
+  permalink: string;
+  like_count: number;
+  comments_count: number;
+};
+
+export async function getIgPosts(igUserId: string, datePreset: string): Promise<PagePost[]> {
+  const { since, until } = getDateRange(datePreset);
+  const fields = "id,caption,media_type,media_url,thumbnail_url,timestamp,permalink,like_count,comments_count";
+  const url = `${BASE_URL}/${igUserId}/media?fields=${fields}&since=${since}&until=${until}&limit=10&access_token=${TOKEN}`;
+
+  const res = await fetch(url, { next: { revalidate: 900 } });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message ?? `Meta API error: ${res.status}`);
+  }
+  const data = await res.json();
+  const media: RawIgMedia[] = data.data ?? [];
+
+  if (media.length === 0) return [];
+
+  const insightsList = await batchIgInsights(media.map((m) => m.id));
+
+  return media.map((m, i): PagePost => {
+    const ins = insightsList[i];
+    const reach = ins?.reach ?? 0;
+    const engagement = ins?.engagement ?? (m.like_count + m.comments_count);
+    return {
+      id: m.id,
+      message: m.caption,
+      created_time: m.timestamp,
+      full_picture: m.thumbnail_url ?? m.media_url,
+      permalink_url: m.permalink,
+      impressions: ins?.impressions ?? 0,
+      impressions_paid: 0,
+      reach,
+      engaged_users: engagement,
+      reactions: m.like_count,
+      comments: m.comments_count,
+      shares: 0,
+      clicks: 0,
+      saves: ins?.saved ?? 0,
+      engagement_rate: reach > 0 ? (engagement / reach) * 100 : 0,
+      source: "instagram",
+    };
   });
 }
 

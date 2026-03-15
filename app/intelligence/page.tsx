@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AdAccount } from "@/lib/meta";
-import type { Page } from "@/lib/pages";
+import type { Page, IgAccount } from "@/lib/pages";
 import { clsx } from "clsx";
 
 const DATE_PRESETS = [
@@ -41,7 +41,9 @@ interface BestPost {
   comments: number;
   shares: number;
   clicks: number;
+  saves?: number;
   impressions_paid: number;
+  source?: "facebook" | "instagram";
 }
 
 function fmt(n: number, decimals = 0) {
@@ -51,11 +53,13 @@ function fmtCurrency(n: number) {
   return `$${fmt(n, 2)}`;
 }
 
+// socialValue format: "fb:PAGE_ID" | "ig:IG_USER_ID"
 export default function IntelligencePage() {
   const [accounts, setAccounts] = useState<AdAccount[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
+  const [igAccounts, setIgAccounts] = useState<IgAccount[]>([]);
   const [accountId, setAccountId] = useState("");
-  const [pageId, setPageId] = useState("");
+  const [socialValue, setSocialValue] = useState("");
   const [datePreset, setDatePreset] = useState("last_30d");
 
   const [bestAd, setBestAd] = useState<BestAd | null>(null);
@@ -63,43 +67,42 @@ export default function IntelligencePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load accounts and pages on mount
   useEffect(() => {
     Promise.all([
       fetch("/api/accounts").then((r) => r.json()),
       fetch("/api/pages").then((r) => r.json()),
-    ]).then(([accs, pgs]) => {
-      if (!accs.error) {
-        setAccounts(accs);
-        if (accs.length > 0) setAccountId(accs[0].id);
-      }
-      if (!pgs.error) {
-        setPages(pgs);
-        if (pgs.length > 0) setPageId(pgs[0].id);
-      }
+      fetch("/api/instagram").then((r) => r.json()),
+    ]).then(([accs, pgs, igs]) => {
+      if (!accs.error) { setAccounts(accs); if (accs.length > 0) setAccountId(accs[0].id); }
+      const igList: IgAccount[] = Array.isArray(igs) ? igs : [];
+      const pgList: Page[] = Array.isArray(pgs) ? pgs : [];
+      setIgAccounts(igList);
+      setPages(pgList);
+      // Default: prefer IG if available, else FB page
+      if (igList.length > 0) setSocialValue(`ig:${igList[0].id}`);
+      else if (pgList.length > 0) setSocialValue(`fb:${pgList[0].id}`);
     });
   }, []);
 
-  // Fetch intelligence when selections are ready
   useEffect(() => {
-    if (!accountId || !pageId) return;
+    if (!accountId || !socialValue) return;
     setLoading(true);
     setError(null);
     setBestAd(null);
     setBestPost(null);
 
-    fetch(`/api/intelligence?accountId=${accountId}&pageId=${pageId}&datePreset=${datePreset}`)
+    const [type, id] = socialValue.split(":");
+    const socialParam = type === "ig" ? `igId=${id}` : `pageId=${id}`;
+
+    fetch(`/api/intelligence?accountId=${accountId}&${socialParam}&datePreset=${datePreset}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) setError(data.error);
-        else {
-          setBestAd(data.bestAd ?? null);
-          setBestPost(data.bestPost ?? null);
-        }
+        else { setBestAd(data.bestAd ?? null); setBestPost(data.bestPost ?? null); }
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [accountId, pageId, datePreset]);
+  }, [accountId, socialValue, datePreset]);
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-10">
@@ -120,12 +123,15 @@ export default function IntelligencePage() {
           ))}
         </select>
         <select
-          value={pageId}
-          onChange={(e) => setPageId(e.target.value)}
+          value={socialValue}
+          onChange={(e) => setSocialValue(e.target.value)}
           className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 min-w-[200px]"
         >
+          {igAccounts.map((a) => (
+            <option key={`ig:${a.id}`} value={`ig:${a.id}`}>📷 @{a.username}</option>
+          ))}
           {pages.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <option key={`fb:${p.id}`} value={`fb:${p.id}`}>📘 {p.name}</option>
           ))}
         </select>
         <select
@@ -158,7 +164,7 @@ export default function IntelligencePage() {
         </div>
       )}
 
-      {!loading && !error && !bestAd && !bestPost && accountId && pageId && (
+      {!loading && !error && !bestAd && !bestPost && accountId && socialValue && (
         <p className="text-gray-500 py-10">No hay datos para este período.</p>
       )}
     </main>
@@ -296,10 +302,13 @@ function BestPostCard({ post }: { post: BestPost | null }) {
             <div className="grid grid-cols-3 gap-3">
               <Metric label="Alcance" value={fmt(post.reach)} />
               <Metric label="Impresiones" value={fmt(post.impressions)} />
-              <Metric label="Reacciones" value={fmt(post.reactions)} />
+              <Metric label={post.source === "instagram" ? "Likes" : "Reacciones"} value={fmt(post.reactions)} />
               <Metric label="Comentarios" value={fmt(post.comments)} />
-              <Metric label="Shares" value={fmt(post.shares)} />
-              <Metric label="Clicks" value={fmt(post.clicks)} />
+              {post.source === "instagram"
+                ? <Metric label="Guardados" value={fmt(post.saves ?? 0)} />
+                : <Metric label="Shares" value={fmt(post.shares)} />
+              }
+              <Metric label={post.source === "instagram" ? "Engagement" : "Clicks"} value={post.source === "instagram" ? fmt(post.reactions + post.comments + (post.saves ?? 0)) : fmt(post.clicks)} />
             </div>
 
             <a
@@ -308,7 +317,7 @@ function BestPostCard({ post }: { post: BestPost | null }) {
               rel="noopener noreferrer"
               className="mt-4 inline-block text-xs text-blue-500 hover:text-blue-400"
             >
-              Ver post en Facebook ↗
+              {post.source === "instagram" ? "Ver en Instagram ↗" : "Ver en Facebook ↗"}
             </a>
           </div>
         </>
