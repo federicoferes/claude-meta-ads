@@ -137,7 +137,7 @@ export async function getIgAccounts(): Promise<IgAccount[]> {
 async function batchIgInsights(mediaIds: string[]) {
   const batch = mediaIds.map((id) => ({
     method: "GET",
-    relative_url: `${id}/insights?metric=reach,impressions,engagement,saved`,
+    relative_url: `${id}/insights?metric=reach,impressions,saved`,
   }));
 
   const body = new URLSearchParams({
@@ -165,7 +165,7 @@ async function batchIgInsights(mediaIds: string[]) {
         if (typeof val === "object") return Object.values(val as Record<string, number>).reduce((a, b) => a + b, 0);
         return val as number;
       };
-      return { reach: getVal("reach"), impressions: getVal("impressions"), engagement: getVal("engagement"), saved: getVal("saved") };
+      return { reach: getVal("reach"), impressions: getVal("impressions"), saved: getVal("saved") };
     } catch { return null; }
   });
 }
@@ -201,7 +201,7 @@ export async function getIgPosts(igUserId: string, datePreset: string): Promise<
   return media.map((m, i): PagePost => {
     const ins = insightsList[i];
     const reach = ins?.reach ?? 0;
-    const engagement = ins?.engagement ?? (m.like_count + m.comments_count);
+    const engagement = m.like_count + m.comments_count;
     return {
       id: m.id,
       message: m.caption,
